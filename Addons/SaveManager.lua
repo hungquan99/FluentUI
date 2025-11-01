@@ -1,3 +1,4 @@
+
 local httpService = game:GetService("HttpService")
 
 local SaveManager = {} do
@@ -227,11 +228,11 @@ local SaveManager = {} do
 
 		local section = tab:AddSection("Configuration")
 
-		section:AddInput("SaveManager_ConfigName", { Title = "Config name" })
-		section:AddDropdown("SaveManager_ConfigList", { Title = "Config list", Values = self:RefreshConfigList(), AllowNull = true })
+		section:AddInput("SaveManager_ConfigName", { Title = "Config Name" })
+		section:AddDropdown("SaveManager_ConfigList", { Title = "Config List", Values = self:RefreshConfigList(), AllowNull = true })
 
 		section:AddButton({
-			Title = "Create config",
+			Title = "Create Config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigName.Value
 
@@ -267,7 +268,7 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Load config",
+			Title = "Load Config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
 
@@ -291,7 +292,7 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Overwrite config",
+			Title = "Overwrite Config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
 
@@ -315,7 +316,7 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Refresh list",
+			Title = "Refresh List",
 			Callback = function()
 				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
 				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
@@ -324,7 +325,7 @@ local SaveManager = {} do
 
 		local AutoloadButton
 		AutoloadButton = section:AddButton({
-			Title = "Set as autoload",
+			Title = "Set As Autoload",
 			Description = "Current autoload config: none",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
@@ -340,7 +341,7 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Remove autoload",
+			Title = "Remove Autoload",
 			Callback = function()
 				local success = SaveManager:RemoveAutoloadConfig()
 				if success then
