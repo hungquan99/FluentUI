@@ -5,12 +5,35 @@ local SaveManager = {} do
 	SaveManager.Ignore = {}
 	SaveManager.Parser = {
 		Toggle = {
-			Save = function(idx, object) 
-				return { type = "Toggle", idx = idx, value = object.Value } 
+			Save = function(idx, object)
+				local data = { type = "Toggle", idx = idx, value = object.Value }
+				if object.Input then
+					data.input = object.Input.Value
+				end
+				return data
 			end,
 			Load = function(idx, data)
-				if SaveManager.Options[idx] then 
-					SaveManager.Options[idx]:SetValue(data.value)
+				local option = SaveManager.Options[idx]
+				if not option then return end
+
+				option:SetValue(data.value)
+
+				if data.input ~= nil and option.Input then
+					option.Input:SetValue(data.input)
+				end
+			end,
+		},
+		Button = {
+			Save = function(idx, object)
+				-- Buttons carry no state of their own - only save one if
+				-- Fluent attached a nested Input to it (e.g. AddButton with an inline text field). Skip entirely otherwise so plain buttons never bloat the config file.
+				if not object.Input then return nil end
+				return { type = "Button", idx = idx, input = object.Input.Value }
+			end,
+			Load = function(idx, data)
+				local option = SaveManager.Options[idx]
+				if option and option.Input and data.input ~= nil then
+					option.Input:SetValue(data.input)
 				end
 			end,
 		},
@@ -94,7 +117,10 @@ local SaveManager = {} do
 			if not self.Parser[option.Type] then continue end
 			if self.Ignore[idx] then continue end
 
-			table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
+			local entry = self.Parser[option.Type].Save(idx, option)
+			if entry then
+				table.insert(data.objects, entry)
+			end
 		end	
 
 		local success, encoded = pcall(httpService.JSONEncode, httpService, data)
