@@ -7,8 +7,11 @@ local SaveManager = {} do
 		Toggle = {
 			Save = function(idx, object)
 				local data = { type = "Toggle", idx = idx, value = object.Value }
+				-- object.Input only exists if Config.Input was passed to
+				-- AddToggle (HookConnectedInput sets it). The actual text
+				-- lives in object.InputValue, not object.Input.Value.
 				if object.Input then
-					data.input = object.Input.Value
+					data.input = object.InputValue
 				end
 				return data
 			end,
@@ -18,22 +21,23 @@ local SaveManager = {} do
 
 				option:SetValue(data.value)
 
-				if data.input ~= nil and option.Input then
-					option.Input:SetValue(data.input)
+				if data.input ~= nil and option.SetInputValue then
+					option:SetInputValue(data.input)
 				end
 			end,
 		},
 		Button = {
 			Save = function(idx, object)
-				-- Buttons carry no state of their own - only save one if
-				-- Fluent attached a nested Input to it (e.g. AddButton with an inline text field). Skip entirely otherwise so plain buttons never bloat the config file.
+				-- Buttons carry no state of their own. Only worth saving if
+				-- Config.Input was attached (HookConnectedInput ran), which
+				-- gives it .InputValue / :SetInputValue same as Toggle.
 				if not object.Input then return nil end
-				return { type = "Button", idx = idx, input = object.Input.Value }
+				return { type = "Button", idx = idx, input = object.InputValue }
 			end,
 			Load = function(idx, data)
 				local option = SaveManager.Options[idx]
-				if option and option.Input and data.input ~= nil then
-					option.Input:SetValue(data.input)
+				if option and option.SetInputValue and data.input ~= nil then
+					option:SetInputValue(data.input)
 				end
 			end,
 		},
@@ -109,9 +113,7 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:Encode()
-		local data = {
-			objects = {}
-		}
+		local data = { objects = {} }
 
 		for idx, option in next, SaveManager.Options do
 			if not self.Parser[option.Type] then continue end
@@ -121,7 +123,7 @@ local SaveManager = {} do
 			if entry then
 				table.insert(data.objects, entry)
 			end
-		end	
+		end
 
 		local success, encoded = pcall(httpService.JSONEncode, httpService, data)
 		if not success then
