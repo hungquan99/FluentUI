@@ -91,6 +91,31 @@ local SaveManager = {} do
 				end
 			end,
 		},
+		Section = {
+			Save = function(idx, object)
+				-- Sections only expose their collapsed state through
+				-- :IsCollapsed() (no plain .Value field like other
+				-- elements), so pull it through that instead. Guarded with
+				-- pcall in case a caller's build of Fluentv2 predates
+				-- Section:IsCollapsed/SetValue - saving just skips it then,
+				-- same as any other element type it doesn't recognize.
+				local ok, collapsed = pcall(function() return object:IsCollapsed() end)
+				if not ok then return nil end
+				return { type = "Section", idx = idx, value = collapsed }
+			end,
+			Load = function(idx, data)
+				local option = SaveManager.Options[idx]
+				if not option then return end
+
+				if option.SetValue then
+					option:SetValue(data.value)
+				elseif option.SetCollapsed then
+					-- Fallback for older Fluentv2 builds that have
+					-- Section:SetCollapsed but not the SetValue wrapper.
+					option:SetCollapsed(data.value, true)
+				end
+			end,
+		},
 	}
 
 	-- Auto Save state
