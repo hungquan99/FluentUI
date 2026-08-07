@@ -61,6 +61,23 @@ local SaveManager = {} do
 				end
 			end,
 		},
+		-- Priority stores a { [entryName] = number } map, not a scalar. Element:SetValue merges it
+		-- over the current entries (unknown names dropped, missing ones left at their default), so
+		-- a config saved before an entry was added or removed still restores cleanly.
+		Priority = {
+			Save = function(idx, object)
+				local value = {}
+				for name, number in pairs(object.Value or {}) do
+					value[tostring(name)] = number
+				end
+				return { type = "Priority", idx = idx, value = value }
+			end,
+			Load = function(idx, data)
+				if SaveManager.Options[idx] and type(data.value) == "table" then
+					SaveManager.Options[idx]:SetValue(data.value)
+				end
+			end,
+		},
 		Colorpicker = {
 			Save = function(idx, object)
 				return { type = "Colorpicker", idx = idx, value = object.Value:ToHex(), transparency = object.Transparency }
@@ -118,6 +135,13 @@ local SaveManager = {} do
 		},
 	}
 
+	-- When true, settings/autoload/autosave all live under a per-account
+	-- subfolder (keyed by LocalPlayer.UserId) instead of directly under
+	-- "<Folder>/settings", so each Roblox account on the same PC gets its
+	-- own configs instead of overwriting a shared one. Off by default to
+	-- keep existing scripts' behavior unchanged; opt in with SetPerAccount(true).
+	SaveManager.PerAccount = false
+
 	-- Auto Save state
 	SaveManager.AutoSaveDelay = 1 -- seconds between autosave diff-checks
 	SaveManager.AutoSaveConfigName = "autosave" -- bootstrap config used only if no config has ever been active
@@ -135,6 +159,23 @@ local SaveManager = {} do
 	function SaveManager:SetFolder(folder)
 		self.Folder = folder
 		self:BuildFolderTree()
+	end
+
+	-- Opt-in: isolate settings/autoload/autosave per Roblox account
+	-- (keyed by LocalPlayer.UserId) instead of sharing one config set
+	-- across every account that runs the script on this PC.
+	function SaveManager:SetPerAccount(enabled)
+		self.PerAccount = enabled
+		self:BuildFolderTree()
+	end
+
+	function SaveManager:GetSettingsFolder()
+		if self.PerAccount then
+			local player = game:GetService("Players").LocalPlayer
+			local id = (player and tostring(player.UserId)) or "unknown"
+			return self.Folder .. "/settings/" .. id
+		end
+		return self.Folder .. "/settings"
 	end
 
 	function SaveManager:Encode()
@@ -168,7 +209,7 @@ local SaveManager = {} do
 			return false, encoded
 		end
 
-		local fullPath = self.Folder .. "/settings/" .. name .. ".json"
+		local fullPath = self:GetSettingsFolder() .. "/" .. name .. ".json"
 		writefile(fullPath, encoded)
 
 		if self.CurrentConfig ~= name then
@@ -184,7 +225,7 @@ local SaveManager = {} do
 			return false, "no config file is selected"
 		end
 		
-		local file = self.Folder .. "/settings/" .. name .. ".json"
+		local file = self:GetSettingsFolder() .. "/" .. name .. ".json"
 		if not isfile(file) then return false, "invalid file" end
 
 		local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(file))
@@ -218,8 +259,12 @@ local SaveManager = {} do
 	function SaveManager:BuildFolderTree()
 		local paths = {
 			self.Folder,
-			self.Folder .. "/settings"
+			self.Folder .. "/settings",
 		}
+
+		if self.PerAccount then
+			table.insert(paths, self:GetSettingsFolder())
+		end
 
 		for i = 1, #paths do
 			local str = paths[i]
@@ -230,7 +275,7 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:RefreshConfigList()
-		local list = listfiles(self.Folder .. "/settings")
+		local list = listfiles(self:GetSettingsFolder())
 
 		local out = {}
 		for i = 1, #list do
@@ -263,8 +308,9 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:LoadAutoloadConfig()
-		if isfile(self.Folder .. "/settings/autoload.txt") then
-			local name = readfile(self.Folder .. "/settings/autoload.txt")
+		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
+		if isfile(autoloadFile) then
+			local name = readfile(autoloadFile)
 
 			local success, err = self:Load(name)
 			if not success then
@@ -286,7 +332,7 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:RemoveAutoloadConfig()
-		local autoloadFile = self.Folder .. "/settings/autoload.txt"
+		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
 		if isfile(autoloadFile) then
 			writefile(autoloadFile, "") -- Clear the file
 			self.Library:Notify({
@@ -334,7 +380,7 @@ local SaveManager = {} do
 				if encoded == self._lastAutoSaveSnapshot then continue end
 				self._lastAutoSaveSnapshot = encoded
 
-				local fullPath = self.Folder .. "/settings/" .. self.CurrentConfig .. ".json"
+				local fullPath = self:GetSettingsFolder() .. "/" .. self.CurrentConfig .. ".json"
 				writefile(fullPath, encoded)
 			end
 		end)
@@ -348,7 +394,7 @@ local SaveManager = {} do
 		if toggle and not toggle.Value then return end
 		if not self.CurrentConfig then return end
 
-		writefile(self.Folder .. "/settings/autoload.txt", self.CurrentConfig)
+		writefile(self:GetSettingsFolder() .. "/autoload.txt", self.CurrentConfig)
 
 		if self.AutoloadButton then
 			self.AutoloadButton:SetDesc("Current autoload config: " .. self.CurrentConfig)
@@ -363,7 +409,7 @@ local SaveManager = {} do
 		local toggle = self.Options and self.Options.SaveManager_AutoSave
 		if toggle and not toggle.Value then return end
 
-		local autoloadPath = self.Folder .. "/settings/autoload.txt"
+		local autoloadPath = self:GetSettingsFolder() .. "/autoload.txt"
 		if isfile(autoloadPath) then
 			local existing = readfile(autoloadPath)
 			if existing and existing ~= "" then
@@ -375,7 +421,7 @@ local SaveManager = {} do
 			self.CurrentConfig = self.AutoSaveConfigName
 		end
 
-		local path = self.Folder .. "/settings/" .. self.CurrentConfig .. ".json"
+		local path = self:GetSettingsFolder() .. "/" .. self.CurrentConfig .. ".json"
 		if not isfile(path) then
 			self:Save(self.CurrentConfig)
 		end
@@ -490,7 +536,7 @@ local SaveManager = {} do
 			Description = "Current autoload config: none",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
-				writefile(self.Folder .. "/settings/autoload.txt", name)
+				writefile(self:GetSettingsFolder() .. "/autoload.txt", name)
 				AutoloadButton:SetDesc("Current autoload config: " .. name)
 				self.Library:Notify({
 					Title = "Interface",
@@ -513,8 +559,9 @@ local SaveManager = {} do
 			end
 		})
 
-		if isfile(self.Folder .. "/settings/autoload.txt") then
-			local name = readfile(self.Folder .. "/settings/autoload.txt")
+		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
+		if isfile(autoloadFile) then
+			local name = readfile(autoloadFile)
 			AutoloadButton:SetDesc("Current autoload config: " .. name)
 		end
 
