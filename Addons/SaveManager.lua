@@ -307,6 +307,131 @@ local SaveManager = {} do
 		self.Options = library.Options
 	end
 
+	-- === Import / Export ===
+	--
+	-- The exported payload is exactly what a config file on disk holds
+	-- ({ objects = { ... } }), NOT a wrapper around it. That keeps the round
+	-- trip honest in both directions: what Export copies can be dropped
+	-- straight into the settings folder as a .json, and any config file
+	-- already sitting in that folder can be pasted into Import.
+
+	-- Strips what an executor's writefile will not take - control characters,
+	-- the Windows-reserved set, and the path separators that would otherwise
+	-- let an imported name write outside the settings folder entirely.
+	function SaveManager:SanitizeName(name)
+		name = tostring(name or "")
+		name = name:gsub("%c", "")
+		name = name:gsub('[<>:"/\\|%?%*]', "")
+		name = name:gsub("^%s+", "")
+		name = name:gsub("%s+$", "")
+		return name:sub(1, 64)
+	end
+
+	-- `name` = a config in the settings folder, or nil/"" for "whatever is set
+	-- on screen right now". Returns the JSON string, or false + a reason.
+	function SaveManager:ExportString(name)
+		if name and name ~= "" then
+			local file = self:GetSettingsFolder() .. "/" .. name .. ".json"
+			if not isfile(file) then
+				return false, "config file not found"
+			end
+
+			local success, data = pcall(readfile, file)
+			if not success or type(data) ~= "string" or data == "" then
+				return false, "could not read config file"
+			end
+
+			return data
+		end
+
+		local success, encoded = self:Encode()
+		if not success then
+			return false, encoded
+		end
+
+		return encoded
+	end
+
+	-- Checks a pasted string is really a config and hands back a clean,
+	-- re-encoded copy of it plus how many settings it carries (or false + a
+	-- reason). Kept separate from ImportString so a caller can validate a paste
+	-- without writing anything to disk.
+	function SaveManager:ValidateImport(text)
+		if type(text) ~= "string" then
+			return false, "nothing to import"
+		end
+
+		text = text:gsub("^%s+", ""):gsub("%s+$", "")
+		if text == "" then
+			return false, "nothing to import"
+		end
+
+		local success, decoded = pcall(httpService.JSONDecode, httpService, text)
+		if not success or type(decoded) ~= "table" then
+			return false, "that is not valid config JSON"
+		end
+
+		-- Tolerate a payload that merely CONTAINS a config (someone pasting a
+		-- wrapper object around it) as well as the config itself.
+		if type(decoded.objects) ~= "table" and type(decoded.config) == "table" then
+			decoded = decoded.config
+		end
+
+		if type(decoded.objects) ~= "table" then
+			return false, "no settings found in that JSON"
+		end
+
+		-- Keep only entries that could actually be replayed. A config exported
+		-- from a different script - or by a newer build with element types this
+		-- one has never heard of - then imports cleanly minus the parts that do
+		-- not apply, rather than failing outright or writing junk to disk. The
+		-- Load path already skips unknown types, so anything kept here is at
+		-- worst inert.
+		local objects = {}
+		for _, entry in ipairs(decoded.objects) do
+			if type(entry) == "table" and type(entry.type) == "string" and entry.idx ~= nil then
+				table.insert(objects, entry)
+			end
+		end
+
+		if #objects == 0 then
+			return false, "no usable settings found in that JSON"
+		end
+
+		local encodeOk, encoded = pcall(httpService.JSONEncode, httpService, { objects = objects })
+		if not encodeOk then
+			return false, "failed to re-encode the imported data"
+		end
+
+		return encoded, #objects
+	end
+
+	-- Writes an imported config to disk under `name` (falling back to
+	-- "imported"), never overwriting an existing one - a clashing name gets a
+	-- numeric suffix instead, so an import can't silently destroy a config the
+	-- user spent time on. Returns the final name + the number of settings.
+	function SaveManager:ImportString(text, name)
+		local encoded, countOrErr = self:ValidateImport(text)
+		if not encoded then
+			return false, countOrErr
+		end
+
+		local base = self:SanitizeName(name)
+		if base == "" then
+			base = "imported"
+		end
+
+		local final, attempt = base, 1
+		while attempt < 1000 and isfile(self:GetSettingsFolder() .. "/" .. final .. ".json") do
+			attempt = attempt + 1
+			final = string.format("%s (%d)", base, attempt)
+		end
+
+		writefile(self:GetSettingsFolder() .. "/" .. final .. ".json", encoded)
+
+		return final, countOrErr
+	end
+
 	function SaveManager:LoadAutoloadConfig()
 		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
 		if isfile(autoloadFile) then
@@ -527,6 +652,122 @@ local SaveManager = {} do
 			Callback = function()
 				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
 				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
+			end
+		})
+
+		section:AddButton({
+			Title = "Export Config",
+			Description = "Copies the selected config to your clipboard as JSON. With nothing selected, copies your current settings instead.",
+			Callback = function()
+				local name = SaveManager.Options.SaveManager_ConfigList
+					and SaveManager.Options.SaveManager_ConfigList.Value
+
+				local data, err = self:ExportString(name)
+				if not data then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = "Failed to export config: " .. tostring(err),
+						Duration = 7
+					})
+				end
+
+				-- Clipboard support varies by executor and a missing global is
+				-- a hard crash, so it is resolved by name rather than called
+				-- blind (same probe the rest of the hub uses).
+				local clipboard = setclipboard or toclipboard or (syn and syn.write_clipboard)
+				if type(clipboard) ~= "function" then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = "This executor has no clipboard function. Copy the file yourself from: "
+							.. self:GetSettingsFolder() .. "/",
+						Duration = 10
+					})
+				end
+
+				if not pcall(clipboard, data) then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = "Copy to clipboard failed",
+						Duration = 7
+					})
+				end
+
+				self.Library:Notify({
+					Title = "Interface",
+					Content = "Config loader",
+					SubContent = string.format(
+						"Copied %s to clipboard (%d characters)",
+						(name and name ~= "") and string.format("config %q", name) or "your current settings",
+						#data
+					),
+					Duration = 7
+				})
+			end
+		})
+
+		-- Declared first so the Callback below can read the input box that is
+		-- part of this very button (it is only populated once AddButton
+		-- returns, which is always before a click can happen).
+		local ImportButton
+		ImportButton = section:AddButton({
+			Title = "Import Config",
+			Description = "Paste an exported config below and press this. It saves as a new config (named from Config Name) and loads it.",
+			Input = {
+				Title = "Config JSON",
+				Placeholder = '{"objects":[ ... ]}',
+				Size = "Large",
+				Height = 90,
+			},
+			Callback = function()
+				if not ImportButton or ImportButton.InputValue == nil then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = "This build of the UI library has no input box on buttons - update it to import configs",
+						Duration = 8
+					})
+				end
+
+				local nameField = SaveManager.Options.SaveManager_ConfigName
+				local wanted = nameField and nameField.Value or ""
+
+				local final, countOrErr = self:ImportString(ImportButton.InputValue, wanted)
+				if not final then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = "Failed to import config: " .. tostring(countOrErr),
+						Duration = 7
+					})
+				end
+
+				-- Refresh before selecting: a dropdown drops any value that is
+				-- not in its current Values list, so the new name has to exist
+				-- there before it can be selected.
+				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
+				SaveManager.Options.SaveManager_ConfigList:SetValue(final)
+
+				local success, err = self:Load(final)
+				if not success then
+					return self.Library:Notify({
+						Title = "Interface",
+						Content = "Config loader",
+						SubContent = string.format("Imported %q but failed to load it: %s", final, tostring(err)),
+						Duration = 7
+					})
+				end
+
+				ImportButton:SetInputValue("")
+
+				self.Library:Notify({
+					Title = "Interface",
+					Content = "Config loader",
+					SubContent = string.format("Imported %d settings as %q and loaded it", countOrErr, final),
+					Duration = 7
+				})
 			end
 		})
 
