@@ -6,10 +6,140 @@ local InterfaceManager = {} do
         Theme = "Darker",
         Acrylic = true,
         Transparency = true,
-        -- Percent, 0 = solid window (the look before this setting existed).
+        -- Percent, 0 = Fluent's own default look (the look before this
+        -- setting existed) - which is already partly translucent, not
+        -- fully opaque.
         WindowTransparency = 0,
-        MenuKeybind = "RightAlt"
+        MenuKeybind = "RightAlt",
+        -- Interface language. Lives here rather than in its own file because
+        -- InterfaceManager's folder is the shared "Skull Hub" one, so the
+        -- choice applies to every game's hub instead of being re-picked per
+        -- game. "en" is the source language and needs no catalog entries.
+        Language = "en",
     }
+
+    -- ── Localization ────────────────────────────────────────────────────
+    --
+    -- The translator itself lives in the library (Library.Localization); this
+    -- addon owns the *picker* and the strings for its own section. Everything
+    -- here is feature-detected against that namespace: an older build of
+    -- Fluent fetched from GitHub has no Localization, and this file must
+    -- still build its section on one - just without a Language dropdown.
+
+    -- Catalogs for InterfaceManager's own section. `en` is registered too,
+    -- explicitly, so a key that is missing from one of the other four falls
+    -- back to real English instead of to a raw dotted key.
+    local STRINGS = {
+        en = {
+            section = "Interface",
+            theme = { title = "Theme", desc = "Changes the interface theme." },
+            transparency = {
+                title = "Window Transparency",
+                desc = "Fades the window background further. 0% is the default look.",
+            },
+            keybind = { title = "Minimize Bind" },
+            language = { title = "Language", desc = "Changes the language of the interface." },
+        },
+        vi = {
+            section = "Giao diện",
+            theme = { title = "Chủ đề", desc = "Đổi chủ đề của giao diện." },
+            transparency = {
+                title = "Độ trong suốt cửa sổ",
+                desc = "Làm nền cửa sổ mờ thêm. 0% là giao diện mặc định.",
+            },
+            keybind = { title = "Phím thu nhỏ" },
+            language = { title = "Ngôn ngữ", desc = "Đổi ngôn ngữ của giao diện." },
+        },
+        ru = {
+            section = "Интерфейс",
+            theme = { title = "Тема", desc = "Меняет тему интерфейса." },
+            transparency = {
+                title = "Прозрачность окна",
+                desc = "Сильнее осветляет фон окна. 0% — вид по умолчанию.",
+            },
+            keybind = { title = "Клавиша сворачивания" },
+            language = { title = "Язык", desc = "Меняет язык интерфейса." },
+        },
+        tr = {
+            section = "Arayüz",
+            theme = { title = "Tema", desc = "Arayüz temasını değiştirir." },
+            transparency = {
+                title = "Pencere Saydamlığı",
+                desc = "Pencere arka planını daha da soluklaştırır. %0 varsayılan görünümdür.",
+            },
+            keybind = { title = "Küçültme Tuşu" },
+            language = { title = "Dil", desc = "Arayüzün dilini değiştirir." },
+        },
+        id = {
+            section = "Antarmuka",
+            theme = { title = "Tema", desc = "Mengubah tema antarmuka." },
+            transparency = {
+                title = "Transparansi Jendela",
+                desc = "Membuat latar jendela makin pudar. 0% adalah tampilan bawaan.",
+            },
+            keybind = { title = "Tombol Perkecil" },
+            language = { title = "Bahasa", desc = "Mengubah bahasa antarmuka." },
+        },
+    }
+
+    local StringsRegistered = false
+
+    function InterfaceManager:GetLocalization()
+        local Library = self.Library
+        return Library and Library.Localization or nil
+    end
+
+    -- Registers this addon's strings exactly once. Add() is idempotent, but
+    -- an addon re-registering on every SetFolder/BuildInterfaceSection call
+    -- would also re-fire every locale subscriber for no reason.
+    function InterfaceManager:RegisterStrings()
+        if StringsRegistered then return end
+        local L = self:GetLocalization()
+        if not L then return end
+
+        for code, messages in pairs(STRINGS) do
+            L.Add(code, { interface = messages })
+        end
+        StringsRegistered = true
+    end
+
+    -- Text for a key that works whether or not the library can translate.
+    -- Used for the two places a live tag cannot go (the section title, which
+    -- Fluent captures at creation, and any plain-string fallback).
+    function InterfaceManager:Translate(key, fallback)
+        local L = self:GetLocalization()
+        if not L then return fallback end
+        self:RegisterStrings()
+        return L.t(key)
+    end
+
+    -- A live tag when the library supports one, the plain English string when
+    -- it does not. Every element config below goes through this, so this file
+    -- has exactly one place that knows localization is optional.
+    function InterfaceManager:Tag(key, fallback)
+        local L = self:GetLocalization()
+        if not L then return fallback end
+        self:RegisterStrings()
+        return L.tag(key)
+    end
+
+    -- Pushes Settings.Language into the library. Called as early as the folder
+    -- is known (SetFolder) so the built-in strings are already in the right
+    -- language by the time the user looks at them, and again from the
+    -- dropdown callback.
+    function InterfaceManager:ApplyLanguage(Code)
+        local L = self:GetLocalization()
+        if not L then return false end
+        self:RegisterStrings()
+
+        Code = Code or InterfaceManager.Settings.Language
+        if not L.IsSupported(Code) then
+            Code = L.Default
+        end
+
+        InterfaceManager.Settings.Language = Code
+        return L.Set(Code)
+    end
 
     -- Library:SetWindowTransparency only does anything on a window created
     -- with Acrylic = true, and every script here creates its window with
@@ -75,6 +205,16 @@ local InterfaceManager = {} do
     function InterfaceManager:SetFolder(folder)
 		self.Folder = folder;
 		self:BuildFolderTree()
+
+		-- Apply the saved language here rather than waiting for
+		-- BuildInterfaceSection: the library's own chrome (search box, close
+		-- prompt, sidebar tooltip) is already on screen by then, and every
+		-- localized element built between these two points would otherwise be
+		-- painted in English first and corrected a moment later.
+		pcall(function()
+			self:LoadSettings()
+			self:ApplyLanguage(InterfaceManager.Settings.Language)
+		end)
 	end
 
     function InterfaceManager:SetLibrary(library)
@@ -122,14 +262,16 @@ local InterfaceManager = {} do
         assert(self.Library, "Must set InterfaceManager.Library")
 		local Library = self.Library
         local Settings = InterfaceManager.Settings
+        local L = self:GetLocalization()
 
         InterfaceManager:LoadSettings()
+        InterfaceManager:ApplyLanguage(Settings.Language)
 
-		local section = tab:AddSection("Interface")
+		local section = tab:AddSection(self:Tag("interface.section", "Interface"))
 
 		local InterfaceTheme = section:AddDropdown("InterfaceTheme", {
-			Title = "Theme",
-			Description = "Changes the interface theme.",
+			Title = self:Tag("interface.theme.title", "Theme"),
+			Description = self:Tag("interface.theme.desc", "Changes the interface theme."),
 			Values = Library.Themes,
 			Default = Settings.Theme,
 			Callback = function(Value)
@@ -145,11 +287,43 @@ local InterfaceManager = {} do
 
         InterfaceTheme:SetValue(Settings.Theme)
 
+        -- Language picker. Only built when the library actually ships a
+        -- translator - an older Fluent would otherwise get a dropdown that
+        -- saves a preference nothing can act on.
+        if L then
+            -- Label/Value entries: the row shows the endonym, the config
+            -- stores the stable code. A plain-string dropdown would save
+            -- "Tiếng Việt" and then fail to restore it the moment the label
+            -- text ever changed.
+            local LanguageValues = {}
+            for _, Code in ipairs(L.GetSupported()) do
+                table.insert(LanguageValues, { Label = L.GetNativeName(Code), Value = Code })
+            end
+
+            local InterfaceLanguage = section:AddDropdown("InterfaceLanguage", {
+                Title = self:Tag("interface.language.title", "Language"),
+                Description = self:Tag("interface.language.desc", "Changes the language of the interface."),
+                Values = LanguageValues,
+                Default = Settings.Language,
+                Callback = function(Value)
+                    -- ApplyLanguage is what writes Settings.Language, so the
+                    -- saved value can only ever be a code the library accepts.
+                    InterfaceManager:ApplyLanguage(Value)
+                    InterfaceManager:SaveSettings()
+                end
+            })
+
+            InterfaceLanguage:SetValue(Settings.Language)
+        end
+
 		-- The slider fires its callback with Default as soon as it is built,
 		-- which is what applies the saved value on load - no SetValue needed.
 		section:AddSlider("WindowTransparency", {
-			Title = "Window Transparency",
-			Description = "Fades the window background. 0% keeps it solid.",
+			Title = self:Tag("interface.transparency.title", "Window Transparency"),
+			Description = self:Tag(
+				"interface.transparency.desc",
+				"Fades the window background further. 0% is the default look."
+			),
 			Default = Settings.WindowTransparency or 0,
 			Min = 0,
 			Max = 100,
@@ -161,7 +335,10 @@ local InterfaceManager = {} do
 			end
 		})
 
-		local MenuKeybind = section:AddKeybind("MenuKeybind", { Title = "Minimize Bind", Default = Settings.MenuKeybind })
+		local MenuKeybind = section:AddKeybind("MenuKeybind", {
+			Title = self:Tag("interface.keybind.title", "Minimize Bind"),
+			Default = Settings.MenuKeybind,
+		})
 		MenuKeybind:OnChanged(function()
 			Settings.MenuKeybind = MenuKeybind.Value
             InterfaceManager:SaveSettings()
