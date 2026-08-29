@@ -6,10 +6,11 @@ local InterfaceManager = {} do
         Theme = "Darker",
         Acrylic = true,
         Transparency = true,
-        -- Percent, 0 = Fluent's own default look (the look before this
-        -- setting existed) - which is already partly translucent, not
-        -- fully opaque.
-        WindowTransparency = 0,
+        -- Percent. This value = Fluent's own default look (the look before
+        -- this setting existed), which is already partly translucent. Drag
+        -- toward 0 for a fully opaque window, toward 100 to fade it out. Keep
+        -- in sync with TRANSPARENCY_NEUTRAL below.
+        WindowTransparency = 20,
         MenuKeybind = "RightAlt",
         -- Interface language. Lives here rather than in its own file because
         -- InterfaceManager's folder is the shared "Skull Hub" one, so the
@@ -35,7 +36,7 @@ local InterfaceManager = {} do
             theme = { title = "Theme", desc = "Changes the interface theme." },
             transparency = {
                 title = "Window Transparency",
-                desc = "Fades the window background further. 0% is the default look.",
+                desc = "Normal look at 20%. Lower makes the window fully solid, higher fades it out.",
             },
             keybind = { title = "Minimize Bind" },
             language = { title = "Language", desc = "Changes the language of the interface." },
@@ -45,7 +46,7 @@ local InterfaceManager = {} do
             theme = { title = "Chủ đề", desc = "Đổi chủ đề của giao diện." },
             transparency = {
                 title = "Độ trong suốt cửa sổ",
-                desc = "Làm nền cửa sổ mờ thêm. 0% là giao diện mặc định.",
+                desc = "Ở 20% là giao diện thường. Kéo xuống để cửa sổ đặc hẳn, kéo lên để mờ dần.",
             },
             keybind = { title = "Phím thu nhỏ" },
             language = { title = "Ngôn ngữ", desc = "Đổi ngôn ngữ của giao diện." },
@@ -55,7 +56,7 @@ local InterfaceManager = {} do
             theme = { title = "Тема", desc = "Меняет тему интерфейса." },
             transparency = {
                 title = "Прозрачность окна",
-                desc = "Сильнее осветляет фон окна. 0% — вид по умолчанию.",
+                desc = "Обычный вид при 20%. Ниже - окно полностью непрозрачное, выше - фон тает.",
             },
             keybind = { title = "Клавиша сворачивания" },
             language = { title = "Язык", desc = "Меняет язык интерфейса." },
@@ -65,7 +66,7 @@ local InterfaceManager = {} do
             theme = { title = "Tema", desc = "Arayüz temasını değiştirir." },
             transparency = {
                 title = "Pencere Saydamlığı",
-                desc = "Pencere arka planını daha da soluklaştırır. %0 varsayılan görünümdür.",
+                desc = "%20'de normal görünüm. Düşük değer pencereyi tamamen opak yapar, yüksek değer soluklaştırır.",
             },
             keybind = { title = "Küçültme Tuşu" },
             language = { title = "Dil", desc = "Arayüzün dilini değiştirir." },
@@ -75,7 +76,7 @@ local InterfaceManager = {} do
             theme = { title = "Tema", desc = "Mengubah tema antarmuka." },
             transparency = {
                 title = "Transparansi Jendela",
-                desc = "Membuat latar jendela makin pudar. 0% adalah tampilan bawaan.",
+                desc = "Tampilan normal di 20%. Lebih rendah membuat jendela sepenuhnya solid, lebih tinggi memudarkannya.",
             },
             keybind = { title = "Tombol Perkecil" },
             language = { title = "Bahasa", desc = "Mengubah bahasa antarmuka." },
@@ -148,6 +149,15 @@ local InterfaceManager = {} do
     -- layers instead; those exist either way.
     local TransparencyBaselines = setmetatable({}, { __mode = "k" })
 
+    -- The slider's neutral point, in percent. At this value every window layer
+    -- sits at exactly its theme transparency - i.e. the window looks precisely
+    -- as it did before this setting existed. BELOW it the window solidifies
+    -- toward fully opaque (0% = no transparency at all); ABOVE it the
+    -- background fades toward invisible (100%). Only this constant decides
+    -- where "the default look" lands on the 0-100 track - it is also the
+    -- Settings default and the slider Default, kept in sync by name.
+    local TRANSPARENCY_NEUTRAL = 20
+
     local function GetWindowLayers(Library)
         local paint = Library.Window and Library.Window.AcrylicPaint
         local frame = paint and paint.Frame
@@ -177,12 +187,25 @@ local InterfaceManager = {} do
             return
         end
 
-        Value = math.clamp(tonumber(Value) or 0, 0, 100)
+        -- A nil call must reproduce the neutral look, not slam the window solid.
+        Value = math.clamp(tonumber(Value) or TRANSPARENCY_NEUTRAL, 0, 100)
+
+        local frac = Value / 100
+        -- Clamped off the ends so the two ratios below can never divide by zero
+        -- even if someone sets the constant to 0 or 100.
+        local neutral = math.clamp(TRANSPARENCY_NEUTRAL / 100, 0.01, 0.99)
+
+        -- Exactly one of these is non-zero for any given Value: fadeT above the
+        -- neutral point (0 at neutral -> 1 at 100%), solidT below it (0 at
+        -- neutral -> 1 at 0%). At the neutral point both are 0.
+        local fadeT = (frac > neutral) and ((frac - neutral) / (1 - neutral)) or 0
+        local solidT = (frac < neutral) and (1 - frac / neutral) or 0
 
         if Library.UseAcrylic and Library.SetWindowTransparency then
-            -- Keep the library's own tuned curve (it also covers the Glass
-            -- theme and any open notifications); it takes a 0-3 scale.
-            Library:SetWindowTransparency(Value / 100 * 3)
+            -- The acrylic path's own 0 is already as solid as that path goes
+            -- (the blur stays no matter what), so the sub-neutral half is a
+            -- no-op there; only the fade half is mapped onto its 0-3 scale.
+            Library:SetWindowTransparency(fadeT * 3)
             return
         end
 
@@ -191,14 +214,16 @@ local InterfaceManager = {} do
             return
         end
 
-        local alpha = Value / 100
         for _, layer in ipairs(layers) do
             local base = TransparencyBaselines[layer]
             if base == nil then
                 base = layer.BackgroundTransparency
                 TransparencyBaselines[layer] = base
             end
-            layer.BackgroundTransparency = base + (1 - base) * alpha
+            -- fadeT drives base -> 1 (invisible), solidT drives base -> 0
+            -- (fully opaque); at the neutral point the layer sits at exactly
+            -- `base`, which is the look this setting never used to touch.
+            layer.BackgroundTransparency = base + (1 - base) * fadeT - base * solidT
         end
     end
 
@@ -322,9 +347,9 @@ local InterfaceManager = {} do
 			Title = self:Tag("interface.transparency.title", "Window Transparency"),
 			Description = self:Tag(
 				"interface.transparency.desc",
-				"Fades the window background further. 0% is the default look."
+				"Normal look at 20%. Lower makes the window fully solid, higher fades it out."
 			),
-			Default = Settings.WindowTransparency or 0,
+			Default = Settings.WindowTransparency or TRANSPARENCY_NEUTRAL,
 			Min = 0,
 			Max = 100,
 			Rounding = 0,
