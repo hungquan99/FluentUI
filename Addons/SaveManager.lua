@@ -150,6 +150,338 @@ local SaveManager = {} do
 	SaveManager._autoSaveLoopStarted = false
 	SaveManager._lastAutoSaveSnapshot = nil
 
+	-- ── Localization ────────────────────────────────────────────────────
+	--
+	-- The Configuration section sits directly beside InterfaceManager's on the
+	-- same Settings tab, so it translates through the same library namespace -
+	-- otherwise picking a language visibly translates one half of one tab.
+	-- Feature-detected the same way: an older Fluent with no Localization
+	-- still builds this section, in English.
+	local STRINGS = {
+		en = {
+			section = "Configuration",
+			name = "Config Name",
+			list = "Config List",
+			create = "Create Config",
+			load = "Load Config",
+			overwrite = "Overwrite Config",
+			refresh = "Refresh List",
+			export = {
+				title = "Export Config",
+				desc = "Copies the selected config to your clipboard as JSON. With nothing selected, copies your current settings instead.",
+			},
+			import = {
+				title = "Import Config",
+				desc = "Paste an exported config below and press this. It saves as a new config (named from Config Name) and loads it.",
+				input = "Config JSON",
+			},
+			autoload = {
+				title = "Set As Autoload",
+				remove = "Remove Autoload",
+				none = "Current autoload config: none",
+				current = "Current autoload config: {name}",
+			},
+			autosave = {
+				title = "Auto Save",
+				desc = "Automatically saves the loaded config whenever a setting changes",
+			},
+			notify = {
+				title = "Interface",
+				content = "Config loader",
+				empty = "Invalid config name (empty)",
+				created = "Created config {name}",
+				loaded = "Loaded config {name}",
+				overwrote = "Overwrote config {name}",
+				autoloaded = "Auto loaded config {name}",
+				autoloadSet = "Set {name} to auto load",
+				autoloadRemoved = "Autoload config has been removed",
+				autoloadMissing = "No autoload config is set",
+				saveFailed = "Failed to save config: {err}",
+				loadFailed = "Failed to load config: {err}",
+				autoloadFailed = "Failed to load autoload config: {err}",
+				overwriteFailed = "Failed to overwrite config: {err}",
+				exportFailed = "Failed to export config: {err}",
+				importFailed = "Failed to import config: {err}",
+				importedNotLoaded = "Imported {name} but failed to load it: {err}",
+				imported = "Imported {count} settings as {name} and loaded it",
+				noClipboard = "This executor has no clipboard function. Copy the file yourself from: {path}",
+				clipboardFailed = "Copy to clipboard failed",
+				noInputBox = "This build of the UI library has no input box on buttons - update it to import configs",
+				copiedNamed = "Copied config {name} to clipboard ({count} characters)",
+				copiedCurrent = "Copied your current settings to clipboard ({count} characters)",
+			},
+		},
+		vi = {
+			section = "Cấu hình",
+			name = "Tên cấu hình",
+			list = "Danh sách cấu hình",
+			create = "Tạo cấu hình",
+			load = "Tải cấu hình",
+			overwrite = "Ghi đè cấu hình",
+			refresh = "Làm mới danh sách",
+			export = {
+				title = "Xuất cấu hình",
+				desc = "Sao chép cấu hình đã chọn vào clipboard dưới dạng JSON. Không chọn gì thì chép thiết lập hiện tại.",
+			},
+			import = {
+				title = "Nhập cấu hình",
+				desc = "Dán cấu hình đã xuất vào ô dưới rồi bấm nút này. Nó lưu thành cấu hình mới (lấy Tên cấu hình) rồi tải luôn.",
+				input = "JSON cấu hình",
+			},
+			autoload = {
+				title = "Đặt làm tự động tải",
+				remove = "Bỏ tự động tải",
+				none = "Cấu hình tự động tải hiện tại: không có",
+				current = "Cấu hình tự động tải hiện tại: {name}",
+			},
+			autosave = {
+				title = "Tự động lưu",
+				desc = "Tự lưu cấu hình đang dùng mỗi khi có thiết lập thay đổi",
+			},
+			notify = {
+				title = "Giao diện",
+				content = "Trình quản lý cấu hình",
+				empty = "Tên cấu hình không hợp lệ (bỏ trống)",
+				created = "Đã tạo cấu hình {name}",
+				loaded = "Đã tải cấu hình {name}",
+				overwrote = "Đã ghi đè cấu hình {name}",
+				autoloaded = "Đã tự động tải cấu hình {name}",
+				autoloadSet = "Đã đặt {name} làm tự động tải",
+				autoloadRemoved = "Đã bỏ cấu hình tự động tải",
+				autoloadMissing = "Chưa đặt cấu hình tự động tải nào",
+				saveFailed = "Lưu cấu hình thất bại: {err}",
+				loadFailed = "Tải cấu hình thất bại: {err}",
+				autoloadFailed = "Tải cấu hình tự động thất bại: {err}",
+				overwriteFailed = "Ghi đè cấu hình thất bại: {err}",
+				exportFailed = "Xuất cấu hình thất bại: {err}",
+				importFailed = "Nhập cấu hình thất bại: {err}",
+				importedNotLoaded = "Đã nhập {name} nhưng tải thất bại: {err}",
+				imported = "Đã nhập {count} thiết lập thành {name} và tải xong",
+				noClipboard = "Executor này không có hàm clipboard. Hãy tự chép tệp từ: {path}",
+				clipboardFailed = "Chép vào clipboard thất bại",
+				noInputBox = "Bản thư viện giao diện này chưa có ô nhập trên nút - hãy cập nhật để nhập cấu hình",
+				copiedNamed = "Đã chép cấu hình {name} vào clipboard ({count} ký tự)",
+				copiedCurrent = "Đã chép thiết lập hiện tại vào clipboard ({count} ký tự)",
+			},
+		},
+		ru = {
+			section = "Конфигурация",
+			name = "Имя конфига",
+			list = "Список конфигов",
+			create = "Создать конфиг",
+			load = "Загрузить конфиг",
+			overwrite = "Перезаписать конфиг",
+			refresh = "Обновить список",
+			export = {
+				title = "Экспорт конфига",
+				desc = "Копирует выбранный конфиг в буфер обмена как JSON. Если ничего не выбрано — копирует текущие настройки.",
+			},
+			import = {
+				title = "Импорт конфига",
+				desc = "Вставьте экспортированный конфиг ниже и нажмите сюда. Он сохранится как новый конфиг (с именем из поля «Имя конфига») и загрузится.",
+				input = "JSON конфига",
+			},
+			autoload = {
+				title = "Сделать автозагрузкой",
+				remove = "Убрать автозагрузку",
+				none = "Текущий конфиг автозагрузки: нет",
+				current = "Текущий конфиг автозагрузки: {name}",
+			},
+			autosave = {
+				title = "Автосохранение",
+				desc = "Автоматически сохраняет загруженный конфиг при любом изменении настройки",
+			},
+			notify = {
+				title = "Интерфейс",
+				content = "Загрузчик конфигов",
+				empty = "Недопустимое имя конфига (пустое)",
+				created = "Конфиг {name} создан",
+				loaded = "Конфиг {name} загружен",
+				overwrote = "Конфиг {name} перезаписан",
+				autoloaded = "Конфиг {name} загружен автоматически",
+				autoloadSet = "{name} назначен для автозагрузки",
+				autoloadRemoved = "Конфиг автозагрузки удалён",
+				autoloadMissing = "Конфиг автозагрузки не задан",
+				saveFailed = "Не удалось сохранить конфиг: {err}",
+				loadFailed = "Не удалось загрузить конфиг: {err}",
+				autoloadFailed = "Не удалось загрузить конфиг автозагрузки: {err}",
+				overwriteFailed = "Не удалось перезаписать конфиг: {err}",
+				exportFailed = "Не удалось экспортировать конфиг: {err}",
+				importFailed = "Не удалось импортировать конфиг: {err}",
+				importedNotLoaded = "{name} импортирован, но загрузить не удалось: {err}",
+				imported = "Импортировано настроек: {count}, сохранено как {name} и загружено",
+				noClipboard = "У этого исполнителя нет функции буфера обмена. Скопируйте файл вручную из: {path}",
+				clipboardFailed = "Не удалось скопировать в буфер обмена",
+				noInputBox = "В этой сборке библиотеки нет поля ввода на кнопках — обновите её для импорта конфигов",
+				copiedNamed = "Конфиг {name} скопирован в буфер обмена ({count} символов)",
+				copiedCurrent = "Текущие настройки скопированы в буфер обмена ({count} символов)",
+			},
+		},
+		tr = {
+			section = "Yapılandırma",
+			name = "Yapılandırma Adı",
+			list = "Yapılandırma Listesi",
+			create = "Yapılandırma Oluştur",
+			load = "Yapılandırma Yükle",
+			overwrite = "Yapılandırmanın Üzerine Yaz",
+			refresh = "Listeyi Yenile",
+			export = {
+				title = "Yapılandırmayı Dışa Aktar",
+				desc = "Seçili yapılandırmayı JSON olarak panoya kopyalar. Hiçbir şey seçili değilse mevcut ayarlarınızı kopyalar.",
+			},
+			import = {
+				title = "Yapılandırmayı İçe Aktar",
+				desc = "Dışa aktarılmış bir yapılandırmayı aşağıya yapıştırıp buna basın. Yeni yapılandırma olarak (Yapılandırma Adı ile) kaydedilir ve yüklenir.",
+				input = "Yapılandırma JSON'u",
+			},
+			autoload = {
+				title = "Otomatik Yükleme Yap",
+				remove = "Otomatik Yüklemeyi Kaldır",
+				none = "Geçerli otomatik yükleme yapılandırması: yok",
+				current = "Geçerli otomatik yükleme yapılandırması: {name}",
+			},
+			autosave = {
+				title = "Otomatik Kaydet",
+				desc = "Bir ayar her değiştiğinde yüklü yapılandırmayı otomatik kaydeder",
+			},
+			notify = {
+				title = "Arayüz",
+				content = "Yapılandırma yükleyici",
+				empty = "Geçersiz yapılandırma adı (boş)",
+				created = "{name} yapılandırması oluşturuldu",
+				loaded = "{name} yapılandırması yüklendi",
+				overwrote = "{name} yapılandırmasının üzerine yazıldı",
+				autoloaded = "{name} yapılandırması otomatik yüklendi",
+				autoloadSet = "{name} otomatik yüklenecek şekilde ayarlandı",
+				autoloadRemoved = "Otomatik yükleme yapılandırması kaldırıldı",
+				autoloadMissing = "Ayarlanmış otomatik yükleme yapılandırması yok",
+				saveFailed = "Yapılandırma kaydedilemedi: {err}",
+				loadFailed = "Yapılandırma yüklenemedi: {err}",
+				autoloadFailed = "Otomatik yükleme yapılandırması yüklenemedi: {err}",
+				overwriteFailed = "Yapılandırmanın üzerine yazılamadı: {err}",
+				exportFailed = "Yapılandırma dışa aktarılamadı: {err}",
+				importFailed = "Yapılandırma içe aktarılamadı: {err}",
+				importedNotLoaded = "{name} içe aktarıldı ama yüklenemedi: {err}",
+				imported = "{count} ayar {name} olarak içe aktarıldı ve yüklendi",
+				noClipboard = "Bu yürütücüde pano işlevi yok. Dosyayı şuradan kendiniz kopyalayın: {path}",
+				clipboardFailed = "Panoya kopyalama başarısız",
+				noInputBox = "Arayüz kitaplığının bu sürümünde düğmelerde giriş kutusu yok - yapılandırma içe aktarmak için güncelleyin",
+				copiedNamed = "{name} yapılandırması panoya kopyalandı ({count} karakter)",
+				copiedCurrent = "Mevcut ayarlarınız panoya kopyalandı ({count} karakter)",
+			},
+		},
+		id = {
+			section = "Konfigurasi",
+			name = "Nama Konfigurasi",
+			list = "Daftar Konfigurasi",
+			create = "Buat Konfigurasi",
+			load = "Muat Konfigurasi",
+			overwrite = "Timpa Konfigurasi",
+			refresh = "Segarkan Daftar",
+			export = {
+				title = "Ekspor Konfigurasi",
+				desc = "Menyalin konfigurasi terpilih ke papan klip sebagai JSON. Jika tidak ada yang dipilih, menyalin pengaturan Anda saat ini.",
+			},
+			import = {
+				title = "Impor Konfigurasi",
+				desc = "Tempel konfigurasi hasil ekspor di bawah lalu tekan ini. Ia disimpan sebagai konfigurasi baru (memakai Nama Konfigurasi) dan dimuat.",
+				input = "JSON Konfigurasi",
+			},
+			autoload = {
+				title = "Jadikan Muat Otomatis",
+				remove = "Hapus Muat Otomatis",
+				none = "Konfigurasi muat otomatis saat ini: tidak ada",
+				current = "Konfigurasi muat otomatis saat ini: {name}",
+			},
+			autosave = {
+				title = "Simpan Otomatis",
+				desc = "Otomatis menyimpan konfigurasi yang dimuat setiap kali ada pengaturan berubah",
+			},
+			notify = {
+				title = "Antarmuka",
+				content = "Pemuat konfigurasi",
+				empty = "Nama konfigurasi tidak valid (kosong)",
+				created = "Konfigurasi {name} dibuat",
+				loaded = "Konfigurasi {name} dimuat",
+				overwrote = "Konfigurasi {name} ditimpa",
+				autoloaded = "Konfigurasi {name} dimuat otomatis",
+				autoloadSet = "{name} disetel untuk dimuat otomatis",
+				autoloadRemoved = "Konfigurasi muat otomatis telah dihapus",
+				autoloadMissing = "Belum ada konfigurasi muat otomatis yang disetel",
+				saveFailed = "Gagal menyimpan konfigurasi: {err}",
+				loadFailed = "Gagal memuat konfigurasi: {err}",
+				autoloadFailed = "Gagal memuat konfigurasi muat otomatis: {err}",
+				overwriteFailed = "Gagal menimpa konfigurasi: {err}",
+				exportFailed = "Gagal mengekspor konfigurasi: {err}",
+				importFailed = "Gagal mengimpor konfigurasi: {err}",
+				importedNotLoaded = "{name} diimpor tetapi gagal dimuat: {err}",
+				imported = "Mengimpor {count} pengaturan sebagai {name} dan memuatnya",
+				noClipboard = "Executor ini tidak punya fungsi papan klip. Salin sendiri berkasnya dari: {path}",
+				clipboardFailed = "Gagal menyalin ke papan klip",
+				noInputBox = "Versi pustaka antarmuka ini tidak punya kotak isian pada tombol - perbarui untuk mengimpor konfigurasi",
+				copiedNamed = "Konfigurasi {name} disalin ke papan klip ({count} karakter)",
+				copiedCurrent = "Pengaturan Anda saat ini disalin ke papan klip ({count} karakter)",
+			},
+		},
+	}
+
+	local StringsRegistered = false
+
+	function SaveManager:GetLocalization()
+		local Library = self.Library
+		return Library and Library.Localization or nil
+	end
+
+	function SaveManager:RegisterStrings()
+		if StringsRegistered then return end
+		local L = self:GetLocalization()
+		if not L then return end
+
+		for code, messages in pairs(STRINGS) do
+			L.Add(code, { config = messages })
+		end
+		StringsRegistered = true
+	end
+
+	-- Resolved now, in the active locale. Used for notification text and for
+	-- descriptions that already carry runtime values (a config name), which a
+	-- tag cannot express.
+	function SaveManager:Translate(key, fallback, params)
+		local L = self:GetLocalization()
+		if not L then
+			if params and type(fallback) == "string" then
+				return (fallback:gsub("{([%w_]+)}", function(name)
+					local value = params[name]
+					if value == nil then return nil end
+					return tostring(value)
+				end))
+			end
+			return fallback
+		end
+		self:RegisterStrings()
+		return L.t(key, params)
+	end
+
+	-- A live tag when the library supports one, plain English when it does not.
+	function SaveManager:Tag(key, fallback)
+		local L = self:GetLocalization()
+		if not L then return fallback end
+		self:RegisterStrings()
+		return L.tag(key)
+	end
+
+	-- Every notification in this file has the same shell; only the SubContent
+	-- differs. One helper keeps the Title/Content pair translated in one place
+	-- instead of at seventeen call sites.
+	function SaveManager:Notify(key, fallback, params, duration)
+		return self.Library:Notify({
+			Title = self:Translate("config.notify.title", "Interface"),
+			Content = self:Translate("config.notify.content", "Config loader"),
+			SubContent = self:Translate(key, fallback, params),
+			Duration = duration or 7,
+		})
+	end
+
 	function SaveManager:SetIgnoreIndexes(list)
 		for _, key in next, list do
 			self.Ignore[key] = true
@@ -251,8 +583,13 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:IgnoreThemeSettings()
-		self:SetIgnoreIndexes({ 
-			"InterfaceTheme", "AcrylicToggle", "TransparentToggle", "MenuKeybind"
+		self:SetIgnoreIndexes({
+			-- InterfaceLanguage belongs here for the same reason as the theme:
+			-- it is persisted by InterfaceManager into the SHARED interface
+			-- folder, so letting a per-game config also save it gives two
+			-- owners for one setting - and the config, loaded last, would
+			-- quietly undo the language the user picked in another game.
+			"InterfaceTheme", "InterfaceLanguage", "AcrylicToggle", "TransparentToggle", "WindowTransparency", "MenuKeybind"
 		})
 	end
 
@@ -439,20 +776,14 @@ local SaveManager = {} do
 
 			local success, err = self:Load(name)
 			if not success then
-				return self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = "Failed to load autoload config: " .. err,
-					Duration = 7
-				})
+				return self:Notify(
+					"config.notify.autoloadFailed",
+					"Failed to load autoload config: {err}",
+					{ err = tostring(err) }
+				)
 			end
 
-			self.Library:Notify({
-				Title = "Interface",
-				Content = "Config loader",
-				SubContent = string.format("Auto loaded config %q", name),
-				Duration = 7
-			})
+			self:Notify("config.notify.autoloaded", "Auto loaded config {name}", { name = string.format("%q", name) })
 		end
 	end
 
@@ -460,20 +791,10 @@ local SaveManager = {} do
 		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
 		if isfile(autoloadFile) then
 			writefile(autoloadFile, "") -- Clear the file
-			self.Library:Notify({
-				Title = "Interface",
-				Content = "Config loader",
-				SubContent = "Autoload config has been removed",
-				Duration = 7
-			})
+			self:Notify("config.notify.autoloadRemoved", "Autoload config has been removed")
 			return true
 		else
-			self.Library:Notify({
-				Title = "Interface",
-				Content = "Config loader",
-				SubContent = "No autoload config is set",
-				Duration = 7
-			})
+			self:Notify("config.notify.autoloadMissing", "No autoload config is set")
 			return false
 		end
 	end
@@ -521,9 +842,30 @@ local SaveManager = {} do
 
 		writefile(self:GetSettingsFolder() .. "/autoload.txt", self.CurrentConfig)
 
-		if self.AutoloadButton then
-			self.AutoloadButton:SetDesc("Current autoload config: " .. self.CurrentConfig)
+		self:SetAutoloadName(self.CurrentConfig)
+	end
+
+	-- The autoload button's description embeds a runtime value, so a plain
+	-- localization tag cannot carry it: the name has to be substituted into
+	-- whichever translated sentence is current. The name is therefore held as
+	-- state and the description rendered from it - by SetAutoloadName when the
+	-- name changes, and by the locale subscription when the sentence does.
+	-- Every writer goes through here so the two can never disagree.
+	function SaveManager:RenderAutoloadDesc()
+		if not self.AutoloadButton then return end
+
+		if self.AutoloadName and self.AutoloadName ~= "" then
+			self.AutoloadButton:SetDesc(
+				self:Translate("config.autoload.current", "Current autoload config: {name}", { name = self.AutoloadName })
+			)
+		else
+			self.AutoloadButton:SetDesc(self:Translate("config.autoload.none", "Current autoload config: none"))
 		end
+	end
+
+	function SaveManager:SetAutoloadName(name)
+		self.AutoloadName = name
+		self:RenderAutoloadDesc()
 	end
 
 	-- Figures out which config autosave should start targeting: whatever
@@ -558,41 +900,36 @@ local SaveManager = {} do
 	function SaveManager:BuildConfigSection(tab)
 		assert(self.Library, "Must set SaveManager.Library")
 
-		local section = tab:AddSection("Configuration")
+		self:RegisterStrings()
 
-		section:AddInput("SaveManager_ConfigName", { Title = "Config Name" })
-		section:AddDropdown("SaveManager_ConfigList", { Title = "Config List", Values = self:RefreshConfigList(), AllowNull = true })
+		local section = tab:AddSection(self:Tag("config.section", "Configuration"))
+
+		section:AddInput("SaveManager_ConfigName", { Title = self:Tag("config.name", "Config Name") })
+		section:AddDropdown("SaveManager_ConfigList", {
+			Title = self:Tag("config.list", "Config List"),
+			Values = self:RefreshConfigList(),
+			AllowNull = true,
+		})
 
 		section:AddButton({
-			Title = "Create Config",
+			Title = self:Tag("config.create", "Create Config"),
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigName.Value
 
-				if name:gsub(" ", "") == "" then 
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Invalid config name (empty)",
-						Duration = 7
-					})
+				if name:gsub(" ", "") == "" then
+					return self:Notify("config.notify.empty", "Invalid config name (empty)")
 				end
 
 				local success, err = self:Save(name)
 				if not success then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Failed to save config: " .. err,
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.saveFailed",
+						"Failed to save config: {err}",
+						{ err = tostring(err) }
+					)
 				end
 
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format("Created config %q", name),
-					Duration = 7
-				})
+				self:Notify("config.notify.created", "Created config {name}", { name = string.format("%q", name) })
 
 				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
 				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
@@ -600,55 +937,43 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Load Config",
+			Title = self:Tag("config.load", "Load Config"),
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
 
 				local success, err = self:Load(name)
 				if not success then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Failed to load config: " .. err,
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.loadFailed",
+						"Failed to load config: {err}",
+						{ err = tostring(err) }
+					)
 				end
 
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format("Loaded config %q", name),
-					Duration = 7
-				})
+				self:Notify("config.notify.loaded", "Loaded config {name}", { name = string.format("%q", name) })
 			end
 		})
 
 		section:AddButton({
-			Title = "Overwrite Config",
+			Title = self:Tag("config.overwrite", "Overwrite Config"),
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
 
 				local success, err = self:Save(name)
 				if not success then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Failed to overwrite config: " .. err,
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.overwriteFailed",
+						"Failed to overwrite config: {err}",
+						{ err = tostring(err) }
+					)
 				end
 
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format("Overwrote config %q", name),
-					Duration = 7
-				})
+				self:Notify("config.notify.overwrote", "Overwrote config {name}", { name = string.format("%q", name) })
 			end
 		})
 
 		section:AddButton({
-			Title = "Refresh List",
+			Title = self:Tag("config.refresh", "Refresh List"),
 			Callback = function()
 				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
 				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
@@ -656,20 +981,22 @@ local SaveManager = {} do
 		})
 
 		section:AddButton({
-			Title = "Export Config",
-			Description = "Copies the selected config to your clipboard as JSON. With nothing selected, copies your current settings instead.",
+			Title = self:Tag("config.export.title", "Export Config"),
+			Description = self:Tag(
+				"config.export.desc",
+				"Copies the selected config to your clipboard as JSON. With nothing selected, copies your current settings instead."
+			),
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList
 					and SaveManager.Options.SaveManager_ConfigList.Value
 
 				local data, err = self:ExportString(name)
 				if not data then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Failed to export config: " .. tostring(err),
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.exportFailed",
+						"Failed to export config: {err}",
+						{ err = tostring(err) }
+					)
 				end
 
 				-- Clipboard support varies by executor and a missing global is
@@ -677,34 +1004,34 @@ local SaveManager = {} do
 				-- blind (same probe the rest of the hub uses).
 				local clipboard = setclipboard or toclipboard or (syn and syn.write_clipboard)
 				if type(clipboard) ~= "function" then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "This executor has no clipboard function. Copy the file yourself from: "
-							.. self:GetSettingsFolder() .. "/",
-						Duration = 10
-					})
+					return self:Notify(
+						"config.notify.noClipboard",
+						"This executor has no clipboard function. Copy the file yourself from: {path}",
+						{ path = self:GetSettingsFolder() .. "/" },
+						10
+					)
 				end
 
 				if not pcall(clipboard, data) then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Copy to clipboard failed",
-						Duration = 7
-					})
+					return self:Notify("config.notify.clipboardFailed", "Copy to clipboard failed")
 				end
 
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format(
-						"Copied %s to clipboard (%d characters)",
-						(name and name ~= "") and string.format("config %q", name) or "your current settings",
-						#data
-					),
-					Duration = 7
-				})
+				-- Two separate keys rather than one with a substituted noun
+				-- phrase: languages that inflect the object of "copied" cannot
+				-- be translated by gluing a fragment into a sentence.
+				if name and name ~= "" then
+					self:Notify(
+						"config.notify.copiedNamed",
+						"Copied config {name} to clipboard ({count} characters)",
+						{ name = string.format("%q", name), count = #data }
+					)
+				else
+					self:Notify(
+						"config.notify.copiedCurrent",
+						"Copied your current settings to clipboard ({count} characters)",
+						{ count = #data }
+					)
+				end
 			end
 		})
 
@@ -713,22 +1040,27 @@ local SaveManager = {} do
 		-- returns, which is always before a click can happen).
 		local ImportButton
 		ImportButton = section:AddButton({
-			Title = "Import Config",
-			Description = "Paste an exported config below and press this. It saves as a new config (named from Config Name) and loads it.",
+			Title = self:Tag("config.import.title", "Import Config"),
+			Description = self:Tag(
+				"config.import.desc",
+				"Paste an exported config below and press this. It saves as a new config (named from Config Name) and loads it."
+			),
 			Input = {
-				Title = "Config JSON",
+				Title = self:Tag("config.import.input", "Config JSON"),
+				-- Left untranslated on purpose: it is a JSON literal the user
+				-- is meant to match, not prose.
 				Placeholder = '{"objects":[ ... ]}',
 				Size = "Large",
 				Height = 90,
 			},
 			Callback = function()
 				if not ImportButton or ImportButton.InputValue == nil then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "This build of the UI library has no input box on buttons - update it to import configs",
-						Duration = 8
-					})
+					return self:Notify(
+						"config.notify.noInputBox",
+						"This build of the UI library has no input box on buttons - update it to import configs",
+						nil,
+						8
+					)
 				end
 
 				local nameField = SaveManager.Options.SaveManager_ConfigName
@@ -736,12 +1068,11 @@ local SaveManager = {} do
 
 				local final, countOrErr = self:ImportString(ImportButton.InputValue, wanted)
 				if not final then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = "Failed to import config: " .. tostring(countOrErr),
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.importFailed",
+						"Failed to import config: {err}",
+						{ err = tostring(countOrErr) }
+					)
 				end
 
 				-- Refresh before selecting: a dropdown drops any value that is
@@ -752,63 +1083,73 @@ local SaveManager = {} do
 
 				local success, err = self:Load(final)
 				if not success then
-					return self.Library:Notify({
-						Title = "Interface",
-						Content = "Config loader",
-						SubContent = string.format("Imported %q but failed to load it: %s", final, tostring(err)),
-						Duration = 7
-					})
+					return self:Notify(
+						"config.notify.importedNotLoaded",
+						"Imported {name} but failed to load it: {err}",
+						{ name = string.format("%q", final), err = tostring(err) }
+					)
 				end
 
 				ImportButton:SetInputValue("")
 
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format("Imported %d settings as %q and loaded it", countOrErr, final),
-					Duration = 7
-				})
+				self:Notify(
+					"config.notify.imported",
+					"Imported {count} settings as {name} and loaded it",
+					{ count = countOrErr, name = string.format("%q", final) }
+				)
 			end
 		})
 
-		local AutoloadButton
-		AutoloadButton = section:AddButton({
-			Title = "Set As Autoload",
-			Description = "Current autoload config: none",
+		local AutoloadButton = section:AddButton({
+			Title = self:Tag("config.autoload.title", "Set As Autoload"),
+			Description = self:Translate("config.autoload.none", "Current autoload config: none"),
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
 				writefile(self:GetSettingsFolder() .. "/autoload.txt", name)
-				AutoloadButton:SetDesc("Current autoload config: " .. name)
-				self.Library:Notify({
-					Title = "Interface",
-					Content = "Config loader",
-					SubContent = string.format("Set %q to auto load", name),
-					Duration = 7
-				})
+				self:SetAutoloadName(name)
+				self:Notify(
+					"config.notify.autoloadSet",
+					"Set {name} to auto load",
+					{ name = string.format("%q", name) }
+				)
 			end
 		})
 
 		self.AutoloadButton = AutoloadButton
 
+		-- Re-render on locale change, not just on state change: the sentence
+		-- gets translated but the name inside it does not, so it has to be
+		-- rebuilt rather than swapped.
+		local L = self:GetLocalization()
+		if L then
+			L.OnChanged(function()
+				self:RenderAutoloadDesc()
+			end)
+		end
+
 		section:AddButton({
-			Title = "Remove Autoload",
+			Title = self:Tag("config.autoload.remove", "Remove Autoload"),
 			Callback = function()
 				local success = SaveManager:RemoveAutoloadConfig()
 				if success then
-					AutoloadButton:SetDesc("Current autoload config: none")
+					self:SetAutoloadName(nil)
 				end
 			end
 		})
 
 		local autoloadFile = self:GetSettingsFolder() .. "/autoload.txt"
 		if isfile(autoloadFile) then
-			local name = readfile(autoloadFile)
-			AutoloadButton:SetDesc("Current autoload config: " .. name)
+			self:SetAutoloadName(readfile(autoloadFile))
+		else
+			self:RenderAutoloadDesc()
 		end
 
 		section:AddToggle("SaveManager_AutoSave", {
-			Title = "Auto Save",
-			Description = "Automatically saves the loaded config whenever a setting changes",
+			Title = self:Tag("config.autosave.title", "Auto Save"),
+			Description = self:Tag(
+				"config.autosave.desc",
+				"Automatically saves the loaded config whenever a setting changes"
+			),
 			Default = true,
 		})
 
